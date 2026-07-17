@@ -28,7 +28,7 @@ Profile 只记录可核对的事实与状态，不是驱动。只有代码、自
 
 ## 第一个适配器：Xiaomi RC003 for macOS
 
-现有 `XiaomiRemoteBridgeMac` target、应用显示名和 Bundle ID 暂时保留，避免总项目改名导致已安装用户重新授予蓝牙、输入监控和辅助功能权限。历史 [v0.2.0 测试版](https://github.com/nijez/xiaomi-remote-bridge-mac/releases/tag/v0.2.0) 继续代表这个设备专用适配器。
+现有 `XiaomiRemoteBridgeMac` target、应用显示名和 Bundle ID 暂时保留，避免总项目改名导致已安装用户重新授予蓝牙、输入监控和辅助功能权限。历史 [v0.2.0 测试版](https://github.com/nijez/open-voice-bridge/releases/tag/v0.2.0) 继续代表这个设备专用适配器。
 
 当前功能：
 

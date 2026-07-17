@@ -10,7 +10,7 @@ VERSION="$(plutil -extract CFBundleShortVersionString raw -o - "$PLIST")"
 BUILD="$(plutil -extract CFBundleVersion raw -o - "$PLIST")"
 DMG_BASENAME="$DISPLAY_NAME-$VERSION-测试版.dmg"
 DMG="$OUTPUT_DIR/$DMG_BASENAME"
-SOURCE_ROOT="xiaomi-remote-bridge-mac-$VERSION-source"
+SOURCE_ROOT="open-voice-bridge-$VERSION-source"
 SOURCE_ARCHIVE="$DISPLAY_NAME-$VERSION-对应源码.zip"
 
 mkdir -p "$OUTPUT_DIR"
