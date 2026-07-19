@@ -2,12 +2,20 @@ import AppKit
 import Combine
 import SwiftUI
 
+private struct ShortcutRecordingTarget: Equatable {
+    let profile: MappingProfile
+    let button: RemoteButton
+    let gesture: ButtonGesture
+}
+
 struct SettingsView: View {
     @ObservedObject var model: BridgeAppModel
     @ObservedObject var settings: AppSettings
     @State private var selectedRemoteButton: RemoteButton = .ok
-    @State private var recordingButton: RemoteButton?
+    @State private var selectedProfile: MappingProfile = .general
+    @State private var recordingTarget: ShortcutRecordingTarget?
     @State private var shortcutMonitor: Any?
+    @State private var frontmostBundleIdentifier: String?
 
     init(model: BridgeAppModel) {
         self.model = model
@@ -110,17 +118,49 @@ struct SettingsView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
+                    Picker("配置", selection: $selectedProfile) {
+                        ForEach(MappingProfile.allCases) { profile in
+                            Text(profile.displayName).tag(profile)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text("当前前台应用：\(activeProfile.displayName) 配置")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    if selectedProfile == .claudeCode {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("使用 Claude Code 配置的应用")
+                                .font(.caption.weight(.semibold))
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible(), alignment: .leading),
+                                    GridItem(.flexible(), alignment: .leading),
+                                ],
+                                alignment: .leading,
+                                spacing: 4
+                            ) {
+                                ForEach(AppSettings.claudeHostCandidates) { host in
+                                    Toggle(host.name, isOn: claudeHostBinding(host))
+                                        .toggleStyle(.checkbox)
+                                        .font(.caption)
+                                }
+                            }
+                        }
+                    }
+
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("按键动作")
                                 .font(.headline)
-                            Text("点击左侧按键定位；修改后自动保存。")
+                            Text("点击左侧按键定位；单击和长按修改后自动保存。")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                         Spacer()
                         Button("恢复默认") {
-                            settings.resetBindings()
+                            settings.resetBindings(for: selectedProfile)
                             selectedRemoteButton = .ok
                         }
                     }
@@ -145,75 +185,54 @@ struct SettingsView: View {
             }
         }
         .padding(4)
+        .onAppear {
+            frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        }
         .onDisappear { stopShortcutRecording() }
+        .onChange(of: selectedProfile) { _ in stopShortcutRecording() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
             stopShortcutRecording()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(
+            for: NSWorkspace.didActivateApplicationNotification
+        )) { notification in
+            let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication
+            frontmostBundleIdentifier = application?.bundleIdentifier
         }
     }
 
     private func mappingRow(_ button: RemoteButton) -> some View {
-        let binding = settings.binding(for: button)
-        return HStack(spacing: 10) {
-            Button {
-                selectedRemoteButton = button
-            } label: {
-                HStack(spacing: 9) {
-                    Text(button.shortLabel)
-                        .font(.caption.weight(.semibold))
-                        .frame(width: 42, height: 30)
-                        .background(
-                            selectedRemoteButton == button
-                                ? Color.accentColor
-                                : Color.secondary.opacity(0.14)
-                        )
-                        .foregroundColor(selectedRemoteButton == button ? .white : .primary)
-                        .clipShape(Capsule())
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(button.displayName)
-                        Text(String(format: "HID 0x%02X", button.hidUsage))
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Button {
+                    selectedRemoteButton = button
+                } label: {
+                    HStack(spacing: 9) {
+                        Text(button.shortLabel)
+                            .font(.caption.weight(.semibold))
+                            .frame(width: 42, height: 30)
+                            .background(
+                                selectedRemoteButton == button
+                                    ? Color.accentColor
+                                    : Color.secondary.opacity(0.14)
+                            )
+                            .foregroundColor(selectedRemoteButton == button ? .white : .primary)
+                            .clipShape(Capsule())
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(button.displayName)
+                            Text(String(format: "HID 0x%02X", button.hidUsage))
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
-            }
-            .buttonStyle(.plain)
-
-            Spacer(minLength: 8)
-
-            if recordingButton == button {
-                Text("请按快捷键，Esc 取消")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .frame(width: 175)
-            } else {
-                Picker("", selection: Binding(
-                    get: { settings.binding(for: button) },
-                    set: { setBinding($0, for: button) }
-                )) {
-                    if case .shortcut = binding {
-                        Text(binding.displayName).tag(binding)
-                    }
-                    ForEach(ButtonAction.allCases) { action in
-                        Text(action.displayName).tag(ButtonBinding.preset(action))
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 175)
+                .buttonStyle(.plain)
+                Spacer()
             }
 
-            Button {
-                if recordingButton == button {
-                    stopShortcutRecording()
-                } else {
-                    startShortcutRecording(for: button)
-                }
-            } label: {
-                Image(systemName: recordingButton == button ? "xmark.circle" : "keyboard")
-            }
-            .buttonStyle(.borderless)
-            .frame(width: 28, height: 28)
-            .help(recordingButton == button ? "取消录制" : "录制快捷键")
-            .accessibilityLabel(recordingButton == button ? "取消录制" : "录制快捷键")
+            bindingEditor(for: button, gesture: .press)
+            bindingEditor(for: button, gesture: .hold)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -234,9 +253,67 @@ struct SettingsView: View {
         )
     }
 
-    private func startShortcutRecording(for button: RemoteButton) {
+    private func bindingEditor(
+        for button: RemoteButton,
+        gesture: ButtonGesture
+    ) -> some View {
+        let target = ShortcutRecordingTarget(
+            profile: selectedProfile,
+            button: button,
+            gesture: gesture
+        )
+        let binding = settings.mapping(for: button, profile: selectedProfile)
+            .binding(for: gesture)
+
+        return HStack(spacing: 8) {
+            Text(gesture.displayName)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(width: 32, alignment: .leading)
+
+            if recordingTarget == target {
+                Text("请按快捷键，Esc 取消")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Picker("", selection: Binding(
+                    get: {
+                        settings.mapping(for: button, profile: selectedProfile)
+                            .binding(for: gesture)
+                    },
+                    set: { setBinding($0, target: target) }
+                )) {
+                    if case .shortcut = binding {
+                        Text(binding.displayName).tag(binding)
+                    }
+                    ForEach(ButtonAction.allCases) { action in
+                        Text(action.displayName).tag(ButtonBinding.preset(action))
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+            }
+
+            Button {
+                if recordingTarget == target {
+                    stopShortcutRecording()
+                } else {
+                    startShortcutRecording(for: target)
+                }
+            } label: {
+                Image(systemName: recordingTarget == target ? "xmark.circle" : "keyboard")
+            }
+            .buttonStyle(.borderless)
+            .frame(width: 28, height: 28)
+            .help(recordingTarget == target ? "取消录制" : "录制快捷键")
+            .accessibilityLabel(recordingTarget == target ? "取消录制" : "录制快捷键")
+        }
+    }
+
+    private func startShortcutRecording(for target: ShortcutRecordingTarget) {
         stopShortcutRecording()
-        recordingButton = button
+        recordingTarget = target
         shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let modifiers = event.modifierFlags.intersection([
                 .control, .option, .shift, .command,
@@ -257,15 +334,23 @@ struct SettingsView: View {
                 shift: modifiers.contains(.shift),
                 command: modifiers.contains(.command)
             )
-            setBinding(.shortcut(combo), for: button)
+            setBinding(.shortcut(combo), target: target)
             stopShortcutRecording()
             return nil
         }
     }
 
-    private func setBinding(_ binding: ButtonBinding, for button: RemoteButton) {
+    private func setBinding(
+        _ binding: ButtonBinding,
+        target: ShortcutRecordingTarget
+    ) {
         let shouldApplyHIDSettings = !settings.customMappingEnabled
-        settings.setBinding(binding, for: button)
+        settings.setBinding(
+            binding,
+            for: target.button,
+            gesture: target.gesture,
+            profile: target.profile
+        )
         if shouldApplyHIDSettings {
             model.applyHIDSettings()
         }
@@ -276,7 +361,26 @@ struct SettingsView: View {
             NSEvent.removeMonitor(shortcutMonitor)
             self.shortcutMonitor = nil
         }
-        recordingButton = nil
+        recordingTarget = nil
+    }
+
+    private var activeProfile: MappingProfile {
+        settings.profile(forBundleIdentifier: frontmostBundleIdentifier)
+    }
+
+    private func claudeHostBinding(_ host: ClaudeHostApplication) -> Binding<Bool> {
+        Binding(
+            get: { settings.claudeHostBundleIDs.contains(host.bundleIdentifier) },
+            set: { enabled in
+                var hosts = settings.claudeHostBundleIDs
+                if enabled {
+                    hosts.insert(host.bundleIdentifier)
+                } else {
+                    hosts.remove(host.bundleIdentifier)
+                }
+                settings.claudeHostBundleIDs = hosts
+            }
+        )
     }
 
     private var permissionsTab: some View {

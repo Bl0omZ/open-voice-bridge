@@ -407,31 +407,31 @@ git commit -m "feat: add remote long-press actions"
 - Consumes: profile settings methods and host candidates from Task 2.
 - Produces: user-editable press/hold mappings for every profile and host checkboxes.
 
-- [ ] **Step 1: Add profile and recording state**
+- [x] **Step 1: Add profile and recording state**
 
 Add `selectedProfile`, `recordingGesture`, and `frontmostBundleIdentifier` state. Initialize the identifier in `.onAppear` from `NSWorkspace.shared.frontmostApplication?.bundleIdentifier`, then observe `NSWorkspace.didActivateApplicationNotification` and refresh it from the notification's running application.
 
-- [ ] **Step 2: Add profile and host controls**
+- [x] **Step 2: Add profile and host controls**
 
 Add a segmented Picker for General, Codex, and Claude Code. Display the profile selected for the current frontmost bundle identifier. Under the Claude Code segment, display one Toggle for each `claudeHostCandidates` entry.
 
-- [ ] **Step 3: Render press and hold editors**
+- [x] **Step 3: Render press and hold editors**
 
 For each button item, keep the button identity in the first line and stack two compact editor lines labeled “单击” and “长按” below it. Do not place two 175-point Pickers side by side in the existing 760-point window. Each editor uses the existing preset Picker and shortcut recorder. Store the recording target as profile + button + gesture so switching profiles, losing focus, or leaving the tab cancels recording without writing to the wrong mapping.
 
-- [ ] **Step 4: Document the default profiles**
+- [x] **Step 4: Document the default profiles**
 
 Replace the single mapping table in `README.md` with the exact default table from `docs/superpowers/specs/2026-07-19-remote-profiles-long-press-design.md`. Explain that selected terminal hosts use Claude Code mappings for every tab in that host.
 
-- [ ] **Step 5: Compile and run all tests**
+- [x] **Step 5: Compile and run all tests**
 
 Run: `./scripts/test.sh && xcrun swift test`
 
 Expected: self-test reports `failed=0`; all Swift tests pass; SwiftUI compiles.
 
-Launch the settings window and verify that all three profile segments fit at 760 x 600, each row exposes separate single/hold controls, and host toggles do not overlap the mapping list.
+Launch the settings window and verify that all three profile segments fit at 760 x 600, each row exposes separate single/hold controls, and host toggles do not overlap the mapping list. Automated Computer Use was attempted after installation but macOS was locked; the user will perform this visual acceptance after unlocking.
 
-- [ ] **Step 6: Commit the settings interface**
+- [x] **Step 6: Commit the settings interface**
 
 ```bash
 git add Sources/XiaomiRemoteBridgeMac/SettingsView.swift README.md

@@ -351,6 +351,17 @@ struct RemoteButtonsTests {
         }
     }
 
+    @Test func everyProfileHasEveryKnownButton() {
+        for profile in MappingProfile.allCases {
+            for button in RemoteButton.allCases {
+                #expect(
+                    AppSettings.defaultProfileBindings[profile]?[button] != nil,
+                    Comment(rawValue: "\(profile.rawValue):\(button.rawValue)")
+                )
+            }
+        }
+    }
+
     @Test func usesVerifiedRC003UsageTable() {
         #expect(RemoteButton.usageMap == [
             0x28: .ok,
