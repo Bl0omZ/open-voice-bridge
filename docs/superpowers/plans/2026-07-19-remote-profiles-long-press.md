@@ -448,11 +448,11 @@ git commit -m "feat: configure remote profiles and hold actions"
 **Interfaces:**
 - Produces: a signed, launchable test App with a separate bundle identifier.
 
-- [ ] **Step 1: Review the complete diff against the design**
+- [x] **Step 1: Review the complete diff against the design**
 
 Check profile selection, migration, timer cancellation, repeated HID reports, permission loss, shortcut modifier release, settings recorder cleanup, and the exclusion of high-risk defaults. Apply only fixes required by the design or correctness.
 
-- [ ] **Step 2: Run final verification**
+- [x] **Step 2: Run final verification**
 
 ```bash
 git diff --check
@@ -464,7 +464,7 @@ xcrun swift test
 
 Expected: every command exits 0; self-test reports no failures; Swift Testing reports all tests passed; App verification prints `APP VERIFY PASS`.
 
-- [ ] **Step 3: Replace only the separately named test App**
+- [x] **Step 3: Replace only the separately named test App**
 
 ```bash
 osascript -e 'tell application id "com.kingwell.XiaomiRemoteBridgeMac.ShortcutTest" to quit' || true
@@ -480,7 +480,7 @@ open /Applications/小米遥控器桥接-快捷键测试.app
 
 Expected: the test App launches without replacing `/Applications/小米遥控器桥接.app`.
 
-- [ ] **Step 4: Verify the running test App**
+- [x] **Step 4: Verify the running test App**
 
 Run:
 
