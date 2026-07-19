@@ -25,7 +25,7 @@ final class AppSettings: ObservableObject {
         didSet { defaults.set(customMappingEnabled, forKey: Keys.customMappingEnabled) }
     }
 
-    @Published var buttonBindings: [RemoteButton: ButtonAction] {
+    @Published var buttonBindings: [RemoteButton: ButtonBinding] {
         didSet { saveBindings() }
     }
 
@@ -51,26 +51,23 @@ final class AppSettings: ObservableObject {
             customMappingEnabled = defaults.bool(forKey: Keys.legacyExclusiveHID)
         }
 
-        if
-            let data = defaults.data(forKey: Keys.buttonBindings),
-            let decoded = try? JSONDecoder().decode([String: ButtonAction].self, from: data)
-        {
+        if let data = defaults.data(forKey: Keys.buttonBindings) {
+            let decoded = Self.decodeBindings(data)
             buttonBindings = Self.defaultBindings.merging(
-                Dictionary(uniqueKeysWithValues: decoded.compactMap { key, value in
-                    RemoteButton(rawValue: key).map { ($0, value) }
-                })
+                decoded
             ) { _, saved in saved }
         } else {
             buttonBindings = Self.defaultBindings
         }
     }
 
-    func action(for button: RemoteButton) -> ButtonAction {
-        buttonBindings[button] ?? .disabled
+    func binding(for button: RemoteButton) -> ButtonBinding {
+        buttonBindings[button] ?? .preset(.disabled)
     }
 
-    func setAction(_ action: ButtonAction, for button: RemoteButton) {
-        buttonBindings[button] = action
+    func setBinding(_ binding: ButtonBinding, for button: RemoteButton) {
+        customMappingEnabled = true
+        buttonBindings[button] = binding
     }
 
     func resetBindings() {
@@ -84,18 +81,33 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    static let defaultBindings: [RemoteButton: ButtonAction] = [
-        .power: .escape,
-        .up: .arrowUp,
-        .left: .arrowLeft,
-        .ok: .returnKey,
-        .right: .arrowRight,
-        .down: .arrowDown,
-        .back: .deleteBackward,
-        .volumeUp: .volumeUp,
-        .home: .showDesktop,
-        .volumeDown: .volumeDown,
-        .menu: .contextMenu,
-        .tv: .appSwitcher,
+    private static func decodeBindings(_ data: Data) -> [RemoteButton: ButtonBinding] {
+        guard let values = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+
+        return Dictionary(uniqueKeysWithValues: values.compactMap { key, value in
+            guard
+                let button = RemoteButton(rawValue: key),
+                let valueData = try? JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed),
+                let binding = try? JSONDecoder().decode(ButtonBinding.self, from: valueData)
+            else { return nil }
+            return (button, binding)
+        })
+    }
+
+    static let defaultBindings: [RemoteButton: ButtonBinding] = [
+        .power: .preset(.escape),
+        .up: .preset(.arrowUp),
+        .left: .preset(.arrowLeft),
+        .ok: .preset(.returnKey),
+        .right: .preset(.arrowRight),
+        .down: .preset(.arrowDown),
+        .back: .preset(.deleteBackward),
+        .volumeUp: .preset(.volumeUp),
+        .home: .preset(.showDesktop),
+        .volumeDown: .preset(.volumeDown),
+        .menu: .preset(.contextMenu),
+        .tv: .preset(.appSwitcher),
     ]
 }

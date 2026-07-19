@@ -51,7 +51,7 @@ snapshot ButtonMapping    keep until key-up
 **Interfaces:**
 - Produces: `ButtonBinding.shortcut(KeyCombo)` persistence and `KeyboardInjector.eventSteps(for:)` with explicit modifier down/up events.
 
-- [ ] **Step 1: Correct the current Codex documentation**
+- [x] **Step 1: Correct the current Codex documentation**
 
 Replace the current `Control-Tab` description with:
 
@@ -60,13 +60,13 @@ Replace the current `Control-Tab` description with:
 | 菜单 | 自定义 `Control-Tab` | Codex App 直接切换到下一个最近会话；松开 Control 后完成切换 |
 ```
 
-- [ ] **Step 2: Run the existing regression tests**
+- [x] **Step 2: Run the existing regression tests**
 
 Run: `./scripts/test.sh && xcrun swift test`
 
 Expected: self-test reports `failed=0`; Swift Testing reports all tests passed, including `shortcutEventSequenceReleasesControl()`.
 
-- [ ] **Step 3: Commit the verified shortcut foundation**
+- [x] **Step 3: Commit the verified shortcut foundation**
 
 ```bash
 git add README.md Sources/XiaomiRemoteBridgeMac/AppSettings.swift Sources/XiaomiRemoteBridgeMac/HIDRemoteMonitor.swift Sources/XiaomiRemoteBridgeMac/KeyboardInjector.swift Sources/XiaomiRemoteBridgeMac/RemoteButtons.swift Sources/XiaomiRemoteBridgeMac/SettingsView.swift Tests/SelfTest/main.swift Tests/XiaomiRemoteBridgeMacTests/RemoteButtonsTests.swift

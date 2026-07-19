@@ -1,10 +1,13 @@
 import AppKit
+import Combine
 import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: BridgeAppModel
     @ObservedObject var settings: AppSettings
     @State private var selectedRemoteButton: RemoteButton = .ok
+    @State private var recordingButton: RemoteButton?
+    @State private var shortcutMonitor: Any?
 
     init(model: BridgeAppModel) {
         self.model = model
@@ -142,10 +145,15 @@ struct SettingsView: View {
             }
         }
         .padding(4)
+        .onDisappear { stopShortcutRecording() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            stopShortcutRecording()
+        }
     }
 
     private func mappingRow(_ button: RemoteButton) -> some View {
-        HStack(spacing: 10) {
+        let binding = settings.binding(for: button)
+        return HStack(spacing: 10) {
             Button {
                 selectedRemoteButton = button
             } label: {
@@ -172,16 +180,40 @@ struct SettingsView: View {
 
             Spacer(minLength: 8)
 
-            Picker("", selection: Binding(
-                get: { settings.action(for: button) },
-                set: { settings.setAction($0, for: button) }
-            )) {
-                ForEach(ButtonAction.allCases) { action in
-                    Text(action.displayName).tag(action)
+            if recordingButton == button {
+                Text("请按快捷键，Esc 取消")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(width: 175)
+            } else {
+                Picker("", selection: Binding(
+                    get: { settings.binding(for: button) },
+                    set: { setBinding($0, for: button) }
+                )) {
+                    if case .shortcut = binding {
+                        Text(binding.displayName).tag(binding)
+                    }
+                    ForEach(ButtonAction.allCases) { action in
+                        Text(action.displayName).tag(ButtonBinding.preset(action))
+                    }
                 }
+                .labelsHidden()
+                .frame(width: 175)
             }
-            .labelsHidden()
-            .frame(width: 175)
+
+            Button {
+                if recordingButton == button {
+                    stopShortcutRecording()
+                } else {
+                    startShortcutRecording(for: button)
+                }
+            } label: {
+                Image(systemName: recordingButton == button ? "xmark.circle" : "keyboard")
+            }
+            .buttonStyle(.borderless)
+            .frame(width: 28, height: 28)
+            .help(recordingButton == button ? "取消录制" : "录制快捷键")
+            .accessibilityLabel(recordingButton == button ? "取消录制" : "录制快捷键")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -200,6 +232,51 @@ struct SettingsView: View {
                     lineWidth: 1
                 )
         )
+    }
+
+    private func startShortcutRecording(for button: RemoteButton) {
+        stopShortcutRecording()
+        recordingButton = button
+        shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            let modifiers = event.modifierFlags.intersection([
+                .control, .option, .shift, .command,
+            ])
+            if event.keyCode == 53, modifiers.isEmpty {
+                stopShortcutRecording()
+                return nil
+            }
+
+            let combo = KeyCombo(
+                keyCode: event.keyCode,
+                keyLabel: ShortcutKeyLabel.name(
+                    keyCode: event.keyCode,
+                    characters: event.charactersIgnoringModifiers
+                ),
+                control: modifiers.contains(.control),
+                option: modifiers.contains(.option),
+                shift: modifiers.contains(.shift),
+                command: modifiers.contains(.command)
+            )
+            setBinding(.shortcut(combo), for: button)
+            stopShortcutRecording()
+            return nil
+        }
+    }
+
+    private func setBinding(_ binding: ButtonBinding, for button: RemoteButton) {
+        let shouldApplyHIDSettings = !settings.customMappingEnabled
+        settings.setBinding(binding, for: button)
+        if shouldApplyHIDSettings {
+            model.applyHIDSettings()
+        }
+    }
+
+    private func stopShortcutRecording() {
+        if let shortcutMonitor {
+            NSEvent.removeMonitor(shortcutMonitor)
+            self.shortcutMonitor = nil
+        }
+        recordingButton = nil
     }
 
     private var permissionsTab: some View {

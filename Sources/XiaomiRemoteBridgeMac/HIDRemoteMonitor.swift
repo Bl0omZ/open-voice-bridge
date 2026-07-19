@@ -219,17 +219,19 @@ final class HIDRemoteMonitor {
 
         for usage in pressed.sorted() {
             guard let button = RemoteButton.usageMap[usage] else { continue }
-            let action = settings.action(for: button)
+            let binding = settings.binding(for: button)
             if !activeDeviceIsSeized {
                 eventSuppressor.arm(button: button, edge: .down)
             }
-            if !KeyboardInjector.send(action) {
+            if !KeyboardInjector.send(binding) {
                 stop()
                 updateStatus("辅助功能权限已失效；已释放遥控器")
                 return
             }
-            startRepeatIfNeeded(usage: usage, button: button, action: action)
-            AppLogger.shared.write("HID BUTTON down=\(button.rawValue) action=\(action.rawValue)")
+            startRepeatIfNeeded(usage: usage, button: button, binding: binding)
+            AppLogger.shared.write(
+                "HID BUTTON down=\(button.rawValue) action=\(binding.logDescription)"
+            )
         }
 
         for usage in released {
@@ -243,12 +245,9 @@ final class HIDRemoteMonitor {
     private func startRepeatIfNeeded(
         usage: UInt16,
         button: RemoteButton,
-        action: ButtonAction
+        binding: ButtonBinding
     ) {
-        let repeatable: Set<RemoteButton> = [
-            .up, .down, .left, .right, .back, .volumeUp, .volumeDown,
-        ]
-        guard repeatable.contains(button), action != .disabled else { return }
+        guard binding.isRepeatable(on: button) else { return }
 
         let timer = DispatchSource.makeTimerSource(queue: .main)
         let interval: DispatchTimeInterval = button == .back ? .milliseconds(50) : .milliseconds(100)
@@ -262,7 +261,7 @@ final class HIDRemoteMonitor {
             if !self.activeDeviceIsSeized {
                 self.eventSuppressor.arm(button: button, edge: .down)
             }
-            if !KeyboardInjector.send(action) {
+            if !KeyboardInjector.send(binding) {
                 self.releaseForRevokedPermissions()
             }
         }

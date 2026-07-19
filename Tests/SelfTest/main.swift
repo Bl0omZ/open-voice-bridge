@@ -370,10 +370,23 @@ if let defaults = UserDefaults(suiteName: suiteName) {
     defaults.set(true, forKey: "exclusiveHID")
     let settings = AppSettings(defaults: defaults)
     check(
-        settings.action(for: .back) == .disabled &&
-            settings.action(for: .up) == .arrowUp &&
+        settings.binding(for: .back) == .preset(.disabled) &&
+            settings.binding(for: .up) == .preset(.arrowUp) &&
             settings.customMappingEnabled,
         "saved bindings and legacy mapping toggle migrate"
+    )
+    let shortcut = ButtonBinding.shortcut(KeyCombo(
+        keyCode: 48,
+        keyLabel: "Tab",
+        control: true,
+        option: false,
+        shift: false,
+        command: false
+    ))
+    settings.setBinding(shortcut, for: .menu)
+    check(
+        AppSettings(defaults: defaults).binding(for: .menu) == shortcut,
+        "custom shortcut binding persists"
     )
     defaults.removePersistentDomain(forName: suiteName)
 } else {

@@ -139,6 +139,112 @@ enum ButtonAction: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+struct KeyCombo: Codable, Hashable {
+    let keyCode: UInt16
+    let keyLabel: String
+    let control: Bool
+    let option: Bool
+    let shift: Bool
+    let command: Bool
+
+    var displayName: String {
+        (control ? "⌃" : "") +
+            (option ? "⌥" : "") +
+            (shift ? "⇧" : "") +
+            (command ? "⌘" : "") +
+            keyLabel
+    }
+}
+
+enum ShortcutKeyLabel {
+    static func name(keyCode: UInt16, characters: String?) -> String {
+        switch keyCode {
+        case 36: return "Return"
+        case 48: return "Tab"
+        case 49: return "Space"
+        case 51: return "Delete"
+        case 53: return "Escape"
+        case 96: return "F5"
+        case 97: return "F6"
+        case 98: return "F7"
+        case 99: return "F3"
+        case 100: return "F8"
+        case 101: return "F9"
+        case 103: return "F11"
+        case 109: return "F10"
+        case 111: return "F12"
+        case 115: return "Home"
+        case 116: return "Page Up"
+        case 118: return "F4"
+        case 119: return "End"
+        case 120: return "F2"
+        case 121: return "Page Down"
+        case 122: return "F1"
+        case 123: return "←"
+        case 124: return "→"
+        case 125: return "↓"
+        case 126: return "↑"
+        default:
+            guard let characters, !characters.isEmpty else { return "键码 \(keyCode)" }
+            return characters.uppercased()
+        }
+    }
+}
+
+enum ButtonBinding: Hashable, Codable {
+    case preset(ButtonAction)
+    case shortcut(KeyCombo)
+
+    private enum CodingKeys: String, CodingKey {
+        case shortcut
+    }
+
+    var displayName: String {
+        switch self {
+        case .preset(let action): action.displayName
+        case .shortcut(let combo): "快捷键：\(combo.displayName)"
+        }
+    }
+
+    var logDescription: String {
+        switch self {
+        case .preset(let action): action.rawValue
+        case .shortcut(let combo): "shortcut:\(combo.displayName)"
+        }
+    }
+
+    func isRepeatable(on button: RemoteButton) -> Bool {
+        guard case .preset(let action) = self, action != .disabled else { return false }
+        switch button {
+        case .up, .down, .left, .right, .back, .volumeUp, .volumeDown:
+            return true
+        default:
+            return false
+        }
+    }
+
+    init(from decoder: Decoder) throws {
+        if let action = try? decoder.singleValueContainer().decode(ButtonAction.self) {
+            self = .preset(action)
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self = .shortcut(try container.decode(KeyCombo.self, forKey: .shortcut))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        switch self {
+        case .preset(let action):
+            var container = encoder.singleValueContainer()
+            try container.encode(action)
+        case .shortcut(let combo):
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(combo, forKey: .shortcut)
+        }
+    }
+}
+
 enum RemoteHIDReportParser {
     static func usages(reportID: UInt32, data: Data) -> Set<UInt16>? {
         guard reportID == 1 else { return nil }
