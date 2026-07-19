@@ -72,6 +72,113 @@ struct RemoteButtonsTests {
         #expect(settings.customMappingEnabled)
     }
 
+    @Test func selectsProfileFromFrontmostApplication() {
+        let hosts = Set(["com.mitchellh.ghostty"])
+
+        #expect(MappingProfileSelector.select(
+            bundleIdentifier: "com.openai.codex",
+            claudeHostBundleIDs: hosts
+        ) == .codex)
+        #expect(MappingProfileSelector.select(
+            bundleIdentifier: "com.mitchellh.ghostty",
+            claudeHostBundleIDs: hosts
+        ) == .claudeCode)
+        #expect(MappingProfileSelector.select(
+            bundleIdentifier: "com.apple.finder",
+            claudeHostBundleIDs: hosts
+        ) == .general)
+        #expect(MappingProfileSelector.select(
+            bundleIdentifier: nil,
+            claudeHostBundleIDs: hosts
+        ) == .general)
+    }
+
+    @Test func migratesLegacyBindingsOnlyToGeneralProfile() throws {
+        let suiteName = "XiaomiRemoteBridgeMacTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(try JSONEncoder().encode([
+            RemoteButton.tv.rawValue: ButtonAction.disabled,
+        ]), forKey: "buttonBindings")
+
+        let settings = AppSettings(defaults: defaults)
+
+        #expect(settings.mapping(for: .tv, profile: .general).press == .preset(.disabled))
+        #expect(settings.mapping(for: .tv, profile: .codex).press.displayName == "快捷键：⌘G")
+        #expect(settings.mapping(for: .tv, profile: .claudeCode).press.displayName == "快捷键：⌃O")
+    }
+
+    @Test func profileBindingsAndClaudeHostsPersistIndependently() throws {
+        let suiteName = "XiaomiRemoteBridgeMacTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = AppSettings(defaults: defaults)
+
+        settings.setBinding(
+            .preset(.playPause),
+            for: .menu,
+            gesture: .hold,
+            profile: .codex
+        )
+        settings.claudeHostBundleIDs = ["com.googlecode.iterm2"]
+        let reloaded = AppSettings(defaults: defaults)
+
+        #expect(reloaded.mapping(for: .menu, profile: .codex).hold == .preset(.playPause))
+        #expect(reloaded.mapping(for: .menu, profile: .general).hold == .preset(.disabled))
+        #expect(reloaded.claudeHostBundleIDs == ["com.googlecode.iterm2"])
+    }
+
+    @Test func malformedProfileBindingDoesNotDiscardValidSiblings() throws {
+        let suiteName = "XiaomiRemoteBridgeMacTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let data = Data(#"""
+        {
+            "codex": {
+                "tv": {
+                    "press": {
+                        "shortcut": {
+                            "keyCode": 48,
+                            "keyLabel": "Tab",
+                            "control": true,
+                            "option": false,
+                            "shift": false,
+                            "command": false
+                        }
+                    },
+                    "hold": "disabled"
+                },
+                "back": {
+                    "press": {"shortcut": {"keyCode": "invalid"}},
+                    "hold": "disabled"
+                }
+            }
+        }
+        """#.utf8)
+        defaults.set(data, forKey: "profileBindings")
+
+        let settings = AppSettings(defaults: defaults)
+
+        #expect(settings.mapping(for: .tv, profile: .codex).press.displayName == "快捷键：⌃Tab")
+        #expect(settings.mapping(for: .back, profile: .codex).press == .preset(.deleteBackward))
+        #expect(settings.mapping(for: .tv, profile: .general).press == .preset(.appSwitcher))
+    }
+
+    @Test func defaultProfilesCoverApprovedHostsAndActions() throws {
+        let suiteName = "XiaomiRemoteBridgeMacTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = AppSettings(defaults: defaults)
+
+        #expect(settings.claudeHostBundleIDs == [
+            "com.mitchellh.ghostty",
+            "dev.warp.Warp-Stable",
+        ])
+        #expect(settings.profile(forBundleIdentifier: "com.openai.codex") == .codex)
+        #expect(settings.mapping(for: .back, profile: .general).hold.displayName == "快捷键：⌘Delete")
+        #expect(settings.mapping(for: .ok, profile: .claudeCode).hold.displayName == "快捷键：⌃J")
+    }
+
     @Test func malformedBindingDoesNotDiscardValidBindings() throws {
         let suiteName = "XiaomiRemoteBridgeMacTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

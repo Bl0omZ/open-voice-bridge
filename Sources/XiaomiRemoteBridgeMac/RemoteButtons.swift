@@ -99,6 +99,49 @@ enum RemoteEventEdge: Equatable {
     case up
 }
 
+enum MappingProfile: String, CaseIterable, Codable, Identifiable {
+    case general
+    case codex
+    case claudeCode = "claude_code"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .general: return "通用"
+        case .codex: return "Codex"
+        case .claudeCode: return "Claude Code"
+        }
+    }
+}
+
+enum ButtonGesture: String, CaseIterable, Codable {
+    case press
+    case hold
+
+    var displayName: String {
+        switch self {
+        case .press: return "单击"
+        case .hold: return "长按"
+        }
+    }
+}
+
+enum MappingProfileSelector {
+    static let codexBundleIdentifier = "com.openai.codex"
+
+    static func select(
+        bundleIdentifier: String?,
+        claudeHostBundleIDs: Set<String>
+    ) -> MappingProfile {
+        if bundleIdentifier == codexBundleIdentifier { return .codex }
+        if let bundleIdentifier, claudeHostBundleIDs.contains(bundleIdentifier) {
+            return .claudeCode
+        }
+        return .general
+    }
+}
+
 enum ButtonAction: String, CaseIterable, Codable, Identifiable {
     case disabled
     case escape
@@ -213,6 +256,10 @@ enum ButtonBinding: Hashable, Codable {
         }
     }
 
+    var isDisabled: Bool {
+        self == .preset(.disabled)
+    }
+
     func isRepeatable(on button: RemoteButton) -> Bool {
         guard case .preset(let action) = self, action != .disabled else { return false }
         switch button {
@@ -241,6 +288,25 @@ enum ButtonBinding: Hashable, Codable {
         case .shortcut(let combo):
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(combo, forKey: .shortcut)
+        }
+    }
+}
+
+struct ButtonMapping: Codable, Hashable {
+    var press: ButtonBinding
+    var hold: ButtonBinding
+
+    func binding(for gesture: ButtonGesture) -> ButtonBinding {
+        switch gesture {
+        case .press: return press
+        case .hold: return hold
+        }
+    }
+
+    mutating func setBinding(_ binding: ButtonBinding, for gesture: ButtonGesture) {
+        switch gesture {
+        case .press: press = binding
+        case .hold: hold = binding
         }
     }
 }

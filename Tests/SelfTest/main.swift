@@ -388,6 +388,25 @@ if let defaults = UserDefaults(suiteName: suiteName) {
         AppSettings(defaults: defaults).binding(for: .menu) == shortcut,
         "custom shortcut binding persists"
     )
+    let profiledSettings = AppSettings(defaults: defaults)
+    check(
+        profiledSettings.profile(forBundleIdentifier: "com.openai.codex") == .codex &&
+            profiledSettings.profile(forBundleIdentifier: "com.mitchellh.ghostty") == .claudeCode &&
+            profiledSettings.profile(forBundleIdentifier: "com.apple.finder") == .general,
+        "frontmost application selects remote mapping profile"
+    )
+    check(
+        profiledSettings.mapping(for: .tv, profile: .codex).press.displayName == "快捷键：⌘G" &&
+            profiledSettings.mapping(for: .tv, profile: .claudeCode).press.displayName == "快捷键：⌃O",
+        "Codex and Claude Code profiles use approved defaults"
+    )
+    check(
+        profiledSettings.claudeHostBundleIDs == [
+            "com.mitchellh.ghostty",
+            "dev.warp.Warp-Stable",
+        ],
+        "Claude Code profile defaults to Ghostty and Warp"
+    )
     defaults.removePersistentDomain(forName: suiteName)
 } else {
     check(false, "saved bindings merge with defaults")

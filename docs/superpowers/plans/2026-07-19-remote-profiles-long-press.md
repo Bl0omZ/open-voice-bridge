@@ -86,7 +86,7 @@ git commit -m "feat: support custom remote shortcuts"
 - Produces: `AppSettings.mapping(for:profile:)`, `setBinding(_:for:gesture:profile:)`, `resetBindings(for:)`, `profile(forBundleIdentifier:)`, and persisted `claudeHostBundleIDs`.
 - Preserves until Tasks 3 and 4: existing `binding(for:)`, `setBinding(_:for:)`, and `resetBindings()` methods as wrappers around the General profile so the whole app target compiles after this task.
 
-- [ ] **Step 1: Write failing profile and migration tests**
+- [x] **Step 1: Write failing profile and migration tests**
 
 Add these tests:
 
@@ -124,13 +124,13 @@ Add these tests:
 
 Also cover independent profile persistence, default Ghostty/Warp hosts, and recovery when one saved profile entry is malformed.
 
-- [ ] **Step 2: Run the focused suite and verify RED**
+- [x] **Step 2: Run the focused suite and verify RED**
 
 Run: `xcrun swift test --filter RemoteButtonsTests`
 
 Expected: compilation fails because `MappingProfile`, `ButtonMapping`, and the new settings methods do not exist.
 
-- [ ] **Step 3: Add the profile domain types**
+- [x] **Step 3: Add the profile domain types**
 
 Add these interfaces to `RemoteButtons.swift`:
 
@@ -171,7 +171,7 @@ enum MappingProfileSelector {
 
 Add `MappingProfile.displayName`, `ButtonBinding.isDisabled`, and make `ButtonMapping` expose its binding for a `ButtonGesture`.
 
-- [ ] **Step 4: Replace global bindings with persisted profile bindings**
+- [x] **Step 4: Replace global bindings with persisted profile bindings**
 
 Use one new `profileBindings` defaults key. Decode each profile and button independently through `JSONSerialization`, merge valid entries over exact defaults, and migrate legacy `buttonBindings` into `.general` only when the new key is absent.
 
@@ -236,7 +236,7 @@ static let defaultClaudeHostBundleIDs: Set<String> = [
 
 Create all default shortcuts with existing `KeyCombo`; use the key codes `[` 33, `]` 30, B 11, C 8, G 5, J 38, N 45, O 31, P 35, R 15, S 1, T 17, U 32, and Tab 48.
 
-- [ ] **Step 5: Run focused tests and add self-test coverage**
+- [x] **Step 5: Run focused tests and add self-test coverage**
 
 Run: `xcrun swift test --filter RemoteButtonsTests`
 
@@ -248,7 +248,7 @@ Run: `./scripts/test.sh`
 
 Expected: `RESULT passed=<count> failed=0`.
 
-- [ ] **Step 6: Commit profile persistence**
+- [x] **Step 6: Commit profile persistence**
 
 ```bash
 git add Sources/XiaomiRemoteBridgeMac/RemoteButtons.swift Sources/XiaomiRemoteBridgeMac/AppSettings.swift Tests/XiaomiRemoteBridgeMacTests/RemoteButtonsTests.swift Tests/SelfTest/main.swift
