@@ -221,6 +221,76 @@ struct RemoteButtonsTests {
         #expect(!ButtonBinding.preset(.returnKey).isRepeatable(on: .ok))
     }
 
+    @Test func shortPressDefersUntilReleaseWhenHoldExists() {
+        let hold = ButtonBinding.shortcut(KeyCombo(
+            keyCode: 51,
+            keyLabel: "Delete",
+            control: false,
+            option: false,
+            shift: false,
+            command: true
+        ))
+        var press = RemoteButtonPress(mapping: ButtonMapping(
+            press: .preset(.deleteBackward),
+            hold: hold
+        ))
+
+        #expect(press.initialAction == nil)
+        #expect(press.release() == .preset(.deleteBackward))
+        #expect(press.fireHold() == nil)
+        #expect(press.release() == nil)
+    }
+
+    @Test func longPressEmitsOnlyHoldAction() {
+        let hold = ButtonBinding.shortcut(KeyCombo(
+            keyCode: 32,
+            keyLabel: "U",
+            control: true,
+            option: false,
+            shift: false,
+            command: false
+        ))
+        var press = RemoteButtonPress(mapping: ButtonMapping(
+            press: .preset(.deleteBackward),
+            hold: hold
+        ))
+
+        #expect(press.fireHold() == hold)
+        #expect(press.fireHold() == nil)
+        #expect(press.release() == nil)
+    }
+
+    @Test func mappingWithoutHoldRunsImmediatelyAndCanRepeat() {
+        let mapping = ButtonMapping(
+            press: .preset(.arrowUp),
+            hold: .preset(.disabled)
+        )
+        var press = RemoteButtonPress(mapping: mapping)
+
+        #expect(press.initialAction == .preset(.arrowUp))
+        #expect(press.release() == nil)
+        #expect(mapping.isRepeatable(on: .up))
+    }
+
+    @Test func cancelledPressCannotEmitAnAction() {
+        var press = RemoteButtonPress(mapping: ButtonMapping(
+            press: .preset(.deleteBackward),
+            hold: .shortcut(KeyCombo(
+                keyCode: 32,
+                keyLabel: "U",
+                control: true,
+                option: false,
+                shift: false,
+                command: false
+            ))
+        ))
+
+        press.cancel()
+
+        #expect(press.fireHold() == nil)
+        #expect(press.release() == nil)
+    }
+
     @Test func shortcutModifiersMapToCGEventFlags() {
         let combo = KeyCombo(
             keyCode: 0,

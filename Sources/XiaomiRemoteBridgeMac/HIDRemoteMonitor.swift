@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import IOKit.hid
 import IOKit.hidsystem
@@ -48,6 +49,8 @@ final class HIDRemoteMonitor {
     private var activeDevice: IOHIDDevice?
     private var activeDeviceIsSeized = false
     private var activeUsages = Set<UInt16>()
+    private var activePresses: [UInt16: RemoteButtonPress] = [:]
+    private var holdTimers: [UInt16: DispatchSourceTimer] = [:]
     private var repeatTimers: [UInt16: DispatchSourceTimer] = [:]
     private var permissionMonitor: DispatchSourceTimer?
     private(set) var status = "按键映射未启用"
@@ -139,8 +142,7 @@ final class HIDRemoteMonitor {
     func stop() {
         permissionMonitor?.cancel()
         permissionMonitor = nil
-        repeatTimers.values.forEach { $0.cancel() }
-        repeatTimers.removeAll()
+        cancelActiveButtonActions()
         activeUsages.removeAll()
         eventSuppressor.stop()
         if let activeDevice {
@@ -198,8 +200,7 @@ final class HIDRemoteMonitor {
         self.activeDevice = nil
         activeDeviceIsSeized = false
         activeUsages.removeAll()
-        repeatTimers.values.forEach { $0.cancel() }
-        repeatTimers.removeAll()
+        cancelActiveButtonActions()
         updateStatus("RC003 按键设备已断开")
         AppLogger.shared.write("HID DISCONNECTED")
     }
@@ -219,35 +220,55 @@ final class HIDRemoteMonitor {
 
         for usage in pressed.sorted() {
             guard let button = RemoteButton.usageMap[usage] else { continue }
-            let binding = settings.binding(for: button)
+            let profile = settings.profile(
+                forBundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            )
+            let mapping = settings.mapping(for: button, profile: profile)
+            let press = RemoteButtonPress(mapping: mapping)
+            activePresses[usage] = press
             if !activeDeviceIsSeized {
                 eventSuppressor.arm(button: button, edge: .down)
             }
-            if !KeyboardInjector.send(binding) {
-                stop()
-                updateStatus("辅助功能权限已失效；已释放遥控器")
-                return
+
+            if let action = press.initialAction {
+                guard send(action) else { return }
+                startRepeatIfNeeded(
+                    usage: usage,
+                    button: button,
+                    mapping: mapping
+                )
+            } else {
+                startHoldTimer(usage: usage, button: button, profile: profile)
             }
-            startRepeatIfNeeded(usage: usage, button: button, binding: binding)
             AppLogger.shared.write(
-                "HID BUTTON down=\(button.rawValue) action=\(binding.logDescription)"
+                "HID BUTTON down=\(button.rawValue) profile=\(profile.rawValue) " +
+                    "press=\(mapping.press.logDescription) hold=\(mapping.hold.logDescription)"
             )
         }
 
         for usage in released {
-            if !activeDeviceIsSeized, let button = RemoteButton.usageMap[usage] {
+            guard let button = RemoteButton.usageMap[usage] else { continue }
+            if !activeDeviceIsSeized {
                 eventSuppressor.arm(button: button, edge: .up)
             }
+            holdTimers.removeValue(forKey: usage)?.cancel()
             repeatTimers.removeValue(forKey: usage)?.cancel()
+            guard var press = activePresses.removeValue(forKey: usage) else { continue }
+            if let action = press.release() {
+                guard send(action) else { return }
+                AppLogger.shared.write(
+                    "HID BUTTON short=\(button.rawValue) action=\(action.logDescription)"
+                )
+            }
         }
     }
 
     private func startRepeatIfNeeded(
         usage: UInt16,
         button: RemoteButton,
-        binding: ButtonBinding
+        mapping: ButtonMapping
     ) {
-        guard binding.isRepeatable(on: button) else { return }
+        guard mapping.isRepeatable(on: button) else { return }
 
         let timer = DispatchSource.makeTimerSource(queue: .main)
         let interval: DispatchTimeInterval = button == .back ? .milliseconds(50) : .milliseconds(100)
@@ -261,12 +282,59 @@ final class HIDRemoteMonitor {
             if !self.activeDeviceIsSeized {
                 self.eventSuppressor.arm(button: button, edge: .down)
             }
-            if !KeyboardInjector.send(binding) {
+            if !KeyboardInjector.send(mapping.press) {
                 self.releaseForRevokedPermissions()
             }
         }
         repeatTimers[usage] = timer
         timer.resume()
+    }
+
+    private func startHoldTimer(
+        usage: UInt16,
+        button: RemoteButton,
+        profile: MappingProfile
+    ) {
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + .seconds(1))
+        timer.setEventHandler { [weak self] in
+            guard let self, self.activeUsages.contains(usage) else { return }
+            guard self.runtimePermissionsAreValid() else {
+                self.releaseForRevokedPermissions()
+                return
+            }
+            guard var press = self.activePresses[usage],
+                  let action = press.fireHold()
+            else { return }
+            self.activePresses[usage] = press
+            guard self.send(action) else { return }
+            AppLogger.shared.write(
+                "HID BUTTON hold=\(button.rawValue) profile=\(profile.rawValue) " +
+                    "action=\(action.logDescription)"
+            )
+        }
+        holdTimers[usage] = timer
+        timer.resume()
+    }
+
+    private func send(_ binding: ButtonBinding) -> Bool {
+        guard KeyboardInjector.send(binding) else {
+            stop()
+            updateStatus("辅助功能权限已失效；已释放遥控器")
+            return false
+        }
+        return true
+    }
+
+    private func cancelActiveButtonActions() {
+        holdTimers.values.forEach { $0.cancel() }
+        holdTimers.removeAll()
+        repeatTimers.values.forEach { $0.cancel() }
+        repeatTimers.removeAll()
+        for usage in activePresses.keys {
+            activePresses[usage]?.cancel()
+        }
+        activePresses.removeAll()
     }
 
     private func runtimePermissionsAreValid() -> Bool {

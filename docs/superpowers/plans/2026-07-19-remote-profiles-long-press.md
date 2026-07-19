@@ -266,7 +266,7 @@ git commit -m "feat: add app-specific remote profiles"
 - Consumes: `ButtonMapping`, `MappingProfileSelector`, and `AppSettings.mapping(for:profile:)` from Task 2.
 - Produces: `RemoteButtonPress.initialAction`, `fireHold()`, `release()`, and `cancel()`.
 
-- [ ] **Step 1: Write failing state-machine tests**
+- [x] **Step 1: Write failing state-machine tests**
 
 ```swift
 @Test func shortPressDefersUntilReleaseWhenHoldExists() {
@@ -334,13 +334,13 @@ git commit -m "feat: add app-specific remote profiles"
 }
 ```
 
-- [ ] **Step 2: Run the focused suite and verify RED**
+- [x] **Step 2: Run the focused suite and verify RED**
 
 Run: `xcrun swift test --filter RemoteButtonsTests`
 
 Expected: compilation fails because `RemoteButtonPress` does not exist.
 
-- [ ] **Step 3: Implement the pure press state machine**
+- [x] **Step 3: Implement the pure press state machine**
 
 ```swift
 struct RemoteButtonPress {
@@ -372,7 +372,7 @@ struct RemoteButtonPress {
 
 `ButtonMapping.isRepeatable(on:)` returns true only when `hold.isDisabled` and `press.isRepeatable(on:)`.
 
-- [ ] **Step 4: Integrate profile snapshots and one-second timers**
+- [x] **Step 4: Integrate profile snapshots and one-second timers**
 
 In `HIDRemoteMonitor`, add `activePresses` and `holdTimers` dictionaries keyed by HID usage. On key-down:
 
@@ -384,13 +384,13 @@ In `HIDRemoteMonitor`, add `activePresses` and `holdTimers` dictionaries keyed b
 
 On key-up, cancel both timers and send `release()`. Call `cancel()` on every active press before removing it in `stop()`, device removal, and permission revocation. Keep all mutation on the main queue so timer and HID callbacks cannot race.
 
-- [ ] **Step 5: Run focused and full tests**
+- [x] **Step 5: Run focused and full tests**
 
 Run: `xcrun swift test --filter RemoteButtonsTests && ./scripts/test.sh`
 
 Expected: all focused tests pass and self-test reports `failed=0`.
 
-- [ ] **Step 6: Commit long-press handling**
+- [x] **Step 6: Commit long-press handling**
 
 ```bash
 git add Sources/XiaomiRemoteBridgeMac/RemoteButtons.swift Sources/XiaomiRemoteBridgeMac/HIDRemoteMonitor.swift Tests/XiaomiRemoteBridgeMacTests/RemoteButtonsTests.swift

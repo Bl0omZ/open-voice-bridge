@@ -309,6 +309,40 @@ struct ButtonMapping: Codable, Hashable {
         case .hold: hold = binding
         }
     }
+
+    func isRepeatable(on button: RemoteButton) -> Bool {
+        hold.isDisabled && press.isRepeatable(on: button)
+    }
+}
+
+struct RemoteButtonPress {
+    let mapping: ButtonMapping
+    private var holdFired = false
+    private var released = false
+
+    init(mapping: ButtonMapping) {
+        self.mapping = mapping
+    }
+
+    var initialAction: ButtonBinding? {
+        mapping.hold.isDisabled ? mapping.press : nil
+    }
+
+    mutating func fireHold() -> ButtonBinding? {
+        guard !released, !holdFired, !mapping.hold.isDisabled else { return nil }
+        holdFired = true
+        return mapping.hold
+    }
+
+    mutating func release() -> ButtonBinding? {
+        guard !released else { return nil }
+        released = true
+        return holdFired || mapping.hold.isDisabled ? nil : mapping.press
+    }
+
+    mutating func cancel() {
+        released = true
+    }
 }
 
 enum RemoteHIDReportParser {
