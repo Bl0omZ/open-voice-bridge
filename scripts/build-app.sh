@@ -9,20 +9,33 @@ OUTPUT_DIR="$ROOT/dist"
 APP_DIR="$OUTPUT_DIR/$DISPLAY_NAME.app"
 
 UNIVERSAL=0
+PREVIEW=0
 for arg in "$@"; do
   case "$arg" in
     --universal) UNIVERSAL=1 ;;
+    --preview) PREVIEW=1 ;;
     *) print -u2 "unknown argument: $arg"; exit 1 ;;
   esac
 done
 
+if [[ "$PREVIEW" -eq 1 ]]; then
+  DISPLAY_NAME="小米遥控器桥接-预览"
+  APP_DIR="$OUTPUT_DIR/$DISPLAY_NAME.app"
+fi
+
 cd "$ROOT"
 
 if [[ "$UNIVERSAL" -eq 1 ]]; then
-  xcrun swift build -c "$CONFIGURATION" --triple arm64-apple-macosx11.0
-  ARM64_BIN_DIR="$(xcrun swift build -c "$CONFIGURATION" --triple arm64-apple-macosx11.0 --show-bin-path)"
-  xcrun swift build -c "$CONFIGURATION" --triple x86_64-apple-macosx11.0
-  X86_64_BIN_DIR="$(xcrun swift build -c "$CONFIGURATION" --triple x86_64-apple-macosx11.0 --show-bin-path)"
+  ARM64_SCRATCH="$ROOT/.build/universal-$CONFIGURATION-arm64"
+  X86_64_SCRATCH="$ROOT/.build/universal-$CONFIGURATION-x86_64"
+  xcrun swift build -c "$CONFIGURATION" --triple arm64-apple-macosx11.0 \
+    --scratch-path "$ARM64_SCRATCH"
+  ARM64_BIN_DIR="$(xcrun swift build -c "$CONFIGURATION" --triple arm64-apple-macosx11.0 \
+    --scratch-path "$ARM64_SCRATCH" --show-bin-path)"
+  xcrun swift build -c "$CONFIGURATION" --triple x86_64-apple-macosx11.0 \
+    --scratch-path "$X86_64_SCRATCH"
+  X86_64_BIN_DIR="$(xcrun swift build -c "$CONFIGURATION" --triple x86_64-apple-macosx11.0 \
+    --scratch-path "$X86_64_SCRATCH" --show-bin-path)"
 
   UNIVERSAL_BIN="$ROOT/.build/universal-$CONFIGURATION/$APP_NAME"
   mkdir -p "${UNIVERSAL_BIN:h}"
@@ -57,6 +70,18 @@ ditto --norsrc --noextattr --noqtn --noacl \
 ditto --norsrc --noextattr --noqtn --noacl \
   "$ROOT/Resources/RC003-remote-photo.png" \
   "$APP_DIR/Contents/Resources/RC003-remote-photo.png"
+ditto --norsrc --noextattr --noqtn --noacl \
+  "$ROOT/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+
+if [[ "$PREVIEW" -eq 1 ]]; then
+  INFO_PLIST="$APP_DIR/Contents/Info.plist"
+  /usr/libexec/PlistBuddy -c \
+    "Set :CFBundleIdentifier com.kingwell.XiaomiRemoteBridgeMac.preview" "$INFO_PLIST"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $DISPLAY_NAME" "$INFO_PLIST"
+  /usr/libexec/PlistBuddy -c "Add :LSEnvironment dict" "$INFO_PLIST"
+  /usr/libexec/PlistBuddy -c "Add :LSEnvironment:OVB_SHOW_SETTINGS string 1" "$INFO_PLIST"
+fi
+
 codesign --force --deep --sign - "$APP_DIR"
 codesign --verify --deep --strict "$APP_DIR"
 

@@ -13,6 +13,7 @@ done
 APP="${APP:-$ROOT/dist/小米遥控器桥接.app}"
 PLIST="$APP/Contents/Info.plist"
 BINARY="$APP/Contents/MacOS/XiaomiRemoteBridgeMac"
+ICON="$APP/Contents/Resources/AppIcon.icns"
 
 test -d "$APP"
 test -f "$PLIST"
@@ -22,12 +23,16 @@ test -f "$APP/Contents/Resources/README.md"
 test -f "$APP/Contents/Resources/THIRD_PARTY_NOTICES.md"
 test -f "$APP/Contents/Resources/COPYRIGHT"
 test -f "$APP/Contents/Resources/RC003-remote-photo.png"
+test -f "$ICON"
 
 test "$(plutil -extract CFBundleIdentifier raw -o - "$PLIST")" = \
   "com.kingwell.XiaomiRemoteBridgeMac"
 test "$(plutil -extract LSUIElement raw -o - "$PLIST")" = "true"
 test "$(plutil -extract LSMinimumSystemVersion raw -o - "$PLIST")" = "11.0"
+test "$(plutil -extract CFBundleIconFile raw -o - "$PLIST")" = "AppIcon.icns"
 test -n "$(plutil -extract NSBluetoothAlwaysUsageDescription raw -o - "$PLIST")"
+test "$(sips -g pixelWidth "$ICON" | awk '/pixelWidth/{print $2}')" = "1024"
+sips -g hasAlpha "$ICON" | rg -q 'hasAlpha: yes'
 
 codesign --verify --deep --strict "$APP"
 file "$BINARY" | rg -q 'Mach-O 64-bit executable'
@@ -43,7 +48,7 @@ if [[ "$UNIVERSAL" -eq 1 ]]; then
   done
 fi
 
-EXPECTED_FILES=$'Contents/Info.plist\nContents/MacOS/XiaomiRemoteBridgeMac\nContents/Resources/COPYRIGHT\nContents/Resources/LICENSE\nContents/Resources/RC003-remote-photo.png\nContents/Resources/README.md\nContents/Resources/THIRD_PARTY_NOTICES.md\nContents/_CodeSignature/CodeResources'
+EXPECTED_FILES=$'Contents/Info.plist\nContents/MacOS/XiaomiRemoteBridgeMac\nContents/Resources/AppIcon.icns\nContents/Resources/COPYRIGHT\nContents/Resources/LICENSE\nContents/Resources/RC003-remote-photo.png\nContents/Resources/README.md\nContents/Resources/THIRD_PARTY_NOTICES.md\nContents/_CodeSignature/CodeResources'
 ACTUAL_FILES="$(find "$APP/Contents" -type f | sed "s#^$APP/##" | LC_ALL=C sort)"
 test "$ACTUAL_FILES" = "$EXPECTED_FILES"
 
