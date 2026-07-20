@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CoreBluetooth
 import SwiftUI
 
 private struct ShortcutRecordingTarget: Equatable {
@@ -16,6 +17,9 @@ struct SettingsView: View {
     @State private var recordingTarget: ShortcutRecordingTarget?
     @State private var shortcutMonitor: Any?
     @State private var frontmostBundleIdentifier: String?
+    @State private var inputMonitoringGranted = false
+    @State private var accessibilityGranted = false
+    @State private var bluetoothGranted = false
 
     init(model: BridgeAppModel) {
         self.model = model
@@ -36,57 +40,159 @@ struct SettingsView: View {
     }
 
     private var generalTab: some View {
-        Form {
-            Section(header: Text("遥控器")) {
-                statusRow("蓝牙状态", value: model.connectionStatus)
-                statusRow("语音状态", value: model.isStreaming ? "语音中" : "等待麦克风键")
-                statusRow("语音触发", value: model.voiceShortcutStatus)
-                Button("立即重新连接") { model.reconnect() }
-            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                statusOverviewCard
 
-            Section(header: Text("虚拟麦克风")) {
-                Picker("语音输出", selection: Binding(
-                    get: { settings.selectedAudioDeviceUID },
-                    set: { value in
-                        settings.selectedAudioDeviceUID = value
-                        model.applyAudioSettings()
+                sectionHeader("语音输出")
+                card {
+                    HStack {
+                        Text("语音输出")
+                        Spacer()
+                        Picker("", selection: Binding(
+                            get: { settings.selectedAudioDeviceUID },
+                            set: { value in
+                                settings.selectedAudioDeviceUID = value
+                                model.applyAudioSettings()
+                            }
+                        )) {
+                            Text("不输出语音").tag("")
+                            ForEach(model.audioDevices) { device in
+                                Text(device.name).tag(device.uid)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 220)
                     }
-                )) {
-                    Text("不输出语音").tag("")
-                    ForEach(model.audioDevices) { device in
-                        Text(device.name).tag(device.uid)
-                    }
-                }
-                HStack {
-                    Text("增益")
-                    Slider(value: Binding(
-                        get: { settings.gainDB },
-                        set: { settings.gainDB = $0 }
-                    ), in: 0...24, step: 1)
-                    Text("\(Int(settings.gainDB)) dB")
-                        .font(.system(.body, design: .monospaced))
-                        .frame(width: 52, alignment: .trailing)
-                }
-                statusRow("音频状态", value: model.audioStatus)
-                HStack {
-                    Button("刷新音频设备") { model.refreshAudioDevices() }
-                    Link("获取 BlackHole", destination: URL(string: "https://existential.audio/blackhole/")!)
-                }
-                Text("应用只把 RC003 语音写到所选设备，不会修改系统默认输入或输出。")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
 
-                HStack {
-                    Button("发送 1 秒测试音") { model.sendTestTone() }
-                        .disabled(!model.canSendTestTone)
-                    Text(model.testToneStatus)
+                    HStack {
+                        Text("增益")
+                        Slider(value: Binding(
+                            get: { settings.gainDB },
+                            set: { settings.gainDB = $0 }
+                        ), in: 0...24, step: 1)
+                        .frame(maxWidth: 320)
+                        Text("\(Int(settings.gainDB)) dB")
+                            .font(.system(.body, design: .monospaced))
+                            .frame(width: 52, alignment: .trailing)
+                        Spacer()
+                    }
+
+                    statusRow("音频状态", value: model.audioStatus)
+
+                    Divider()
+
+                    HStack(spacing: 10) {
+                        Button("发送 1 秒测试音") { model.sendTestTone() }
+                            .disabled(!model.canSendTestTone)
+                        Text(model.testToneStatus)
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                    Text("测试音只在内存生成、低音量、固定频率，不落盘；RC003 语音进行中时不可用。")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+
+                    Divider()
+
+                    HStack(spacing: 12) {
+                        Button("刷新音频设备") { model.refreshAudioDevices() }
+                        Link("获取 BlackHole", destination: URL(string: "https://existential.audio/blackhole/")!)
+                    }
+                    Text("应用只把 RC003 语音写到所选设备，不会修改系统默认输入或输出。")
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 }
-                Text("测试音只在内存生成、低音量、固定频率，不落盘；RC003 语音进行中时不可用。")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
             }
+            .padding(20)
+        }
+        .background(Color(NSColor.windowBackgroundColor))
+    }
+
+    private var statusOverviewCard: some View {
+        card {
+            HStack(alignment: .center, spacing: 12) {
+                StatusDot(isStreaming: model.isStreaming, isConnected: model.isConnected)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.isStreaming ? "正在语音" : model.connectionStatus)
+                        .font(.title3.weight(.semibold))
+                    if model.isStreaming {
+                        Text(model.connectionStatus)
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                Spacer()
+                Button("立即重新连接") { model.reconnect() }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 24) {
+                    statusFact(
+                        icon: model.isStreaming ? "mic.fill" : "mic",
+                        text: model.isStreaming ? "语音中" : "等待麦克风键",
+                        tint: model.isStreaming ? .orange : .secondary
+                    )
+                    statusFact(
+                        icon: "speaker.wave.2",
+                        text: audioOutputName,
+                        tint: .secondary
+                    )
+                    Spacer()
+                }
+                statusFact(
+                    icon: "globe",
+                    text: model.voiceShortcutStatus,
+                    tint: .secondary
+                )
+            }
+        }
+    }
+
+    private var audioOutputName: String {
+        let uid = settings.selectedAudioDeviceUID
+        guard !uid.isEmpty else { return "不输出语音" }
+        return model.audioDevices.first { $0.uid == uid }?.name ?? uid
+    }
+
+    private func card<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(NSColor.controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
+            .padding(.leading, 2)
+    }
+
+    private func statusFact(
+        icon: String,
+        text: String,
+        tint: Color
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(tint)
+                .frame(width: 16, alignment: .center)
+            Text(text)
+                .font(.callout)
+                .foregroundColor(tint)
+                .lineLimit(1)
         }
     }
 
@@ -106,6 +212,7 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 }
+                .padding(6)
             }
 
             HStack(alignment: .top, spacing: 16) {
@@ -173,7 +280,7 @@ struct SettingsView: View {
                                         .id(button.id)
                                 }
                             }
-                            .padding(.trailing, 4)
+                            .padding(.trailing, 10)
                         }
                         .onChange(of: selectedRemoteButton) { button in
                             withAnimation(.easeInOut(duration: 0.2)) {
@@ -185,6 +292,7 @@ struct SettingsView: View {
             }
         }
         .padding(4)
+        .background(Color(NSColor.windowBackgroundColor))
         .onAppear {
             frontmostBundleIdentifier = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         }
@@ -203,39 +311,51 @@ struct SettingsView: View {
     }
 
     private func mappingRow(_ button: RemoteButton) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Button {
-                    selectedRemoteButton = button
-                } label: {
-                    HStack(spacing: 9) {
-                        Text(button.shortLabel)
-                            .font(.caption.weight(.semibold))
-                            .frame(width: 42, height: 30)
-                            .background(
-                                selectedRemoteButton == button
-                                    ? Color.accentColor
-                                    : Color.secondary.opacity(0.14)
-                            )
-                            .foregroundColor(selectedRemoteButton == button ? .white : .primary)
-                            .clipShape(Capsule())
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(button.displayName)
-                            Text(String(format: "HID 0x%02X", button.hidUsage))
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
+        let mapping = settings.mapping(for: button, profile: selectedProfile)
+        return HStack(spacing: 12) {
+            Button {
+                selectedRemoteButton = button
+            } label: {
+                HStack(spacing: 9) {
+                    Text(button.shortLabel)
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 42, height: 30)
+                        .background(
+                            selectedRemoteButton == button
+                                ? Color.accentColor
+                                : Color.secondary.opacity(0.14)
+                        )
+                        .foregroundColor(selectedRemoteButton == button ? .white : .primary)
+                        .clipShape(Capsule())
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(button.displayName)
+                        Text(String(format: "HID 0x%02X", button.hidUsage))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
                     }
+                    Spacer()
                 }
-                .buttonStyle(.plain)
-                Spacer()
             }
+            .buttonStyle(.plain)
+            .frame(width: 150, alignment: .leading)
 
-            bindingEditor(for: button, gesture: .press)
-            bindingEditor(for: button, gesture: .hold)
+            Spacer()
+
+            VStack(spacing: 6) {
+                bindingEditor(
+                    for: button,
+                    gesture: .press,
+                    dimmed: mapping.binding(for: .press).isDisabled
+                )
+                bindingEditor(
+                    for: button,
+                    gesture: .hold,
+                    dimmed: mapping.binding(for: .hold).isDisabled
+                )
+            }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.vertical, 8)
         .background(
             selectedRemoteButton == button
                 ? Color.accentColor.opacity(0.09)
@@ -255,7 +375,8 @@ struct SettingsView: View {
 
     private func bindingEditor(
         for button: RemoteButton,
-        gesture: ButtonGesture
+        gesture: ButtonGesture,
+        dimmed: Bool
     ) -> some View {
         let target = ShortcutRecordingTarget(
             profile: selectedProfile,
@@ -269,7 +390,8 @@ struct SettingsView: View {
             Text(gesture.displayName)
                 .font(.caption)
                 .foregroundColor(.secondary)
-                .frame(width: 32, alignment: .leading)
+                .frame(width: 28, alignment: .leading)
+                .opacity(dimmed ? 0.6 : 1)
 
             if recordingTarget == target {
                 Text("请按快捷键，Esc 取消")
@@ -292,7 +414,9 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(maxWidth: .infinity)
+                .frame(width: 150)
+                .opacity(dimmed ? 0.55 : 1)
+                .help(binding.displayName)
             }
 
             Button {
@@ -305,7 +429,7 @@ struct SettingsView: View {
                 Image(systemName: recordingTarget == target ? "xmark.circle" : "keyboard")
             }
             .buttonStyle(.borderless)
-            .frame(width: 28, height: 28)
+            .frame(width: 24, height: 24)
             .help(recordingTarget == target ? "取消录制" : "录制快捷键")
             .accessibilityLabel(recordingTarget == target ? "取消录制" : "录制快捷键")
         }
@@ -384,53 +508,102 @@ struct SettingsView: View {
     }
 
     private var permissionsTab: some View {
-        Form {
-            Section(header: Text("所需权限")) {
-                permissionRow(
-                    title: "蓝牙",
-                    detail: "连接 RC003 并读取 ATVV 语音服务",
-                    actionTitle: "打开蓝牙设置"
-                ) {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") {
-                        NSWorkspace.shared.open(url)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                sectionHeader("所需权限")
+                card {
+                    permissionRow(
+                        icon: "dot.radiowaves.left.and.right",
+                        iconTint: .blue,
+                        title: "蓝牙",
+                        detail: "连接 RC003 并读取 ATVV 语音服务",
+                        granted: bluetoothGranted,
+                        actionTitle: "打开蓝牙设置"
+                    ) {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") {
+                            NSWorkspace.shared.open(url)
+                        }
                     }
+                    Divider()
+                    permissionRow(
+                        icon: "keyboard",
+                        iconTint: Color(NSColor.systemIndigo),
+                        title: "输入监控",
+                        detail: "读取 RC003 原始 HID 报告，并在兼容模式下抑制重复系统事件",
+                        granted: inputMonitoringGranted,
+                        actionTitle: "请求权限"
+                    ) { model.requestInputMonitoringPermission() }
+                    Divider()
+                    permissionRow(
+                        icon: "accessibility",
+                        iconTint: .green,
+                        title: "辅助功能",
+                        detail: "把映射后的按键动作发送给当前应用",
+                        granted: accessibilityGranted,
+                        actionTitle: "请求权限"
+                    ) { model.requestAccessibilityPermission() }
                 }
-                permissionRow(
-                    title: "输入监控",
-                    detail: "读取 RC003 原始 HID 报告，并在兼容模式下抑制重复系统事件",
-                    actionTitle: "请求权限"
-                ) { model.requestInputMonitoringPermission() }
-                permissionRow(
-                    title: "辅助功能",
-                    detail: "把映射后的按键动作发送给当前应用",
-                    actionTitle: "请求权限"
-                ) { model.requestAccessibilityPermission() }
-            }
 
-            Section(header: Text("诊断")) {
-                Button("在 Finder 中显示日志") { model.openLogFolder() }
-                Text("日志不记录语音内容、蓝牙地址或外设 UUID。")
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
+                sectionHeader("诊断")
+                card {
+                    HStack {
+                        Button("在 Finder 中显示日志") { model.openLogFolder() }
+                        Spacer()
+                    }
+                    Text("日志不记录语音内容、蓝牙地址或外设 UUID。")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
             }
+            .padding(20)
+        }
+        .background(Color(NSColor.windowBackgroundColor))
+        .onAppear { refreshPermissions() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            refreshPermissions()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshPermissions()
         }
     }
 
+    private func refreshPermissions() {
+        inputMonitoringGranted = HIDRemoteMonitor.isInputMonitoringGranted
+        accessibilityGranted = KeyboardInjector.isAccessibilityTrusted
+        bluetoothGranted = CBCentralManager.authorization == .allowedAlways
+    }
+
     private func permissionRow(
+        icon: String,
+        iconTint: Color,
         title: String,
         detail: String,
+        granted: Bool,
         actionTitle: String,
         action: @escaping () -> Void
     ) -> some View {
-        HStack {
-            VStack(alignment: .leading) {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 30, height: 30)
+                .background(granted ? iconTint : Color.secondary.opacity(0.55))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
+                    .font(.body.weight(.medium))
                 Text(detail)
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
             Spacer()
-            Button(actionTitle, action: action)
+            if granted {
+                Label("已授权", systemImage: "checkmark.circle.fill")
+                    .font(.callout.weight(.medium))
+                    .foregroundColor(.green)
+            } else {
+                Button(actionTitle, action: action)
+            }
         }
     }
 
@@ -559,5 +732,48 @@ private struct RemoteControlDiagram: View {
         .help("遥控器真实 F5 硬件按下/松开会映射为 Mac Fn；同时桥接 ATVV 语音")
         .accessibilityElement()
         .accessibilityLabel(Text("语音/Fn 键，固定核心功能"))
+    }
+}
+
+private struct StatusDot: View {
+    let isStreaming: Bool
+    let isConnected: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pulsing = false
+
+    private var dotColor: Color {
+        if isStreaming { return .orange }
+        return isConnected ? .green : Color.secondary.opacity(0.5)
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.orange.opacity(0.35))
+                .frame(width: 30, height: 30)
+                .scaleEffect(pulsing ? 1.45 : 0.9)
+                .opacity(isStreaming ? (pulsing ? 0 : 0.9) : 0)
+            Circle()
+                .fill(dotColor)
+                .frame(width: 13, height: 13)
+        }
+        .frame(width: 34, height: 34)
+        .onAppear { updatePulse() }
+        .onChange(of: isStreaming) { _ in updatePulse() }
+    }
+
+    private func updatePulse() {
+        if isStreaming, !reduceMotion {
+            guard !pulsing else { return }
+            withAnimation(.easeOut(duration: 1.3).repeatForever(autoreverses: false)) {
+                pulsing = true
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                pulsing = false
+            }
+        }
     }
 }

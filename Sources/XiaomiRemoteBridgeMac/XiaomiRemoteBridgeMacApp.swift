@@ -35,6 +35,9 @@ private final class XiaomiRemoteBridgeAppDelegate: NSObject, NSApplicationDelega
         observeModel()
         model.startIfNeeded()
         refreshMenuStatus()
+        if ProcessInfo.processInfo.environment["OVB_SHOW_SETTINGS"] == "1" {
+            showSettings()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

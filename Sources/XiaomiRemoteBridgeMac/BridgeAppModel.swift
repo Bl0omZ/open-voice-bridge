@@ -6,6 +6,7 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     let settings = AppSettings()
 
     @Published private(set) var connectionStatus = "正在初始化蓝牙"
+    @Published private(set) var isConnected = false
     @Published private(set) var hidStatus = "按键映射未启用"
     @Published private(set) var audioStatus = "未选择语音输出设备"
     @Published private(set) var isStreaming = false
@@ -200,7 +201,10 @@ final class BridgeAppModel: ObservableObject, XiaomiBluetoothBridgeDelegate {
     ) {
         connectionStatus = state.displayText
         if case .ready = state {
+            isConnected = true
             applyVoiceFunctionMapping()
+        } else {
+            isConnected = false
         }
     }
 
