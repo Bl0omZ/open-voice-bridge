@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 @testable import XiaomiRemoteBridgeMac
@@ -449,5 +450,24 @@ struct RemoteButtonsTests {
         #expect(RemoteButton.ok.nativeEvent == .keyboard(keyCode: 36))
         #expect(RemoteButton.volumeUp.nativeEvent == .systemKey(type: 0))
         #expect(RemoteButton.back.nativeEvent == nil)
+    }
+
+    @Test func suppressesNativeKeyRepeatsUntilRemoteRelease() throws {
+        let suppressor = KeyboardEventSuppressor()
+        let source = try #require(CGEventSource(stateID: .hidSystemState))
+        func event(isDown: Bool) throws -> CGEvent {
+            try #require(CGEvent(
+                keyboardEventSource: source,
+                virtualKey: 50,
+                keyDown: isDown
+            ))
+        }
+
+        suppressor.arm(button: .tv, edge: .down)
+        #expect(suppressor.handle(type: .keyDown, event: try event(isDown: true)))
+        #expect(suppressor.handle(type: .keyDown, event: try event(isDown: true)))
+        suppressor.arm(button: .tv, edge: .up)
+        #expect(suppressor.handle(type: .keyUp, event: try event(isDown: false)))
+        #expect(!suppressor.handle(type: .keyDown, event: try event(isDown: true)))
     }
 }

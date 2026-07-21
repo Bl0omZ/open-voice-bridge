@@ -28,6 +28,7 @@ final class KeyboardEventSuppressor {
 
     private let lock = NSLock()
     private var pendingEvents: [PendingEvent] = []
+    private var heldEvents: [RemoteNativeEvent] = []
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
@@ -70,6 +71,7 @@ final class KeyboardEventSuppressor {
     func stop() {
         lock.lock()
         pendingEvents.removeAll()
+        heldEvents.removeAll()
         lock.unlock()
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
@@ -87,6 +89,11 @@ final class KeyboardEventSuppressor {
         let now = ProcessInfo.processInfo.systemUptime
         lock.lock()
         pendingEvents.removeAll { $0.expiresAt <= now }
+        if edge == .down {
+            if !heldEvents.contains(nativeEvent) { heldEvents.append(nativeEvent) }
+        } else {
+            heldEvents.removeAll { $0 == nativeEvent }
+        }
         pendingEvents.append(PendingEvent(
             event: nativeEvent,
             edge: edge,
@@ -98,7 +105,7 @@ final class KeyboardEventSuppressor {
         lock.unlock()
     }
 
-    fileprivate func handle(type: CGEventType, event: CGEvent) -> Bool {
+    func handle(type: CGEventType, event: CGEvent) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
@@ -113,6 +120,15 @@ final class KeyboardEventSuppressor {
         let now = ProcessInfo.processInfo.systemUptime
         lock.lock()
         pendingEvents.removeAll { $0.expiresAt <= now }
+        if descriptor.edge == .down, heldEvents.contains(descriptor.event) {
+            if let matchIndex = pendingEvents.firstIndex(where: {
+                $0.event == descriptor.event && $0.edge == descriptor.edge
+            }) {
+                pendingEvents.remove(at: matchIndex)
+            }
+            lock.unlock()
+            return true
+        }
         guard let matchIndex = pendingEvents.firstIndex(where: {
             $0.event == descriptor.event && $0.edge == descriptor.edge
         }) else {
